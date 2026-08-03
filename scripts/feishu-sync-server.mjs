@@ -12,6 +12,7 @@ const CREATOR_TABLE_ID = process.env.FEISHU_CREATOR_TABLE_ID ?? "";
 const BASE_URL = process.env.FEISHU_BASE_URL ?? "";
 const ALLOWED_ORIGIN = process.env.SYNC_ALLOWED_ORIGIN ?? "http://localhost:3000";
 const LARK_IDENTITY = process.env.LARK_IDENTITY ?? "user";
+const LARK_PROFILE = process.env.LARK_PROFILE?.trim() ?? "";
 const LARK_CLI =
   process.env.LARK_CLI_PATH ?? `${homedir()}/.local/bin/lark-cli`;
 
@@ -86,7 +87,8 @@ const creatorWriteFields = {
 
 async function runLark(args) {
   try {
-    const { stdout } = await execFileAsync(LARK_CLI, args, {
+    const profileArgs = LARK_PROFILE ? ["--profile", LARK_PROFILE] : [];
+    const { stdout } = await execFileAsync(LARK_CLI, [...profileArgs, ...args], {
       maxBuffer: 20 * 1024 * 1024,
       env: {
         ...process.env,
