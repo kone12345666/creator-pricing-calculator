@@ -1,6 +1,13 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+if (process.platform === "win32") {
+  spawnSync(process.execPath, ["scripts/patch-vinext-windows.mjs"], {
+    stdio: "inherit",
+    cwd: resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+  });
+}
 
 const command = process.argv[2];
 const supported = new Set(["build", "start", "dev"]);
@@ -13,23 +20,43 @@ if (!command || !supported.has(command)) {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const vinextBin = resolve(
-  root,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "vinext.cmd" : "vinext",
-);
+const vinextCli = resolve(root, "node_modules", "vinext", "dist", "cli.js");
+const vinextArgs = [vinextCli, command, ...process.argv.slice(3)];
 
 process.env.WRANGLER_LOG_PATH ??= ".wrangler/wrangler.log";
 
-const result = spawnSync(
-  vinextBin,
-  [command, ...process.argv.slice(3)],
-  {
+function reportSpawnError(error) {
+  process.stderr.write(`${error.message}\n`);
+  process.exit(1);
+}
+
+if (command === "build") {
+  const result = spawnSync(process.execPath, vinextArgs, {
     stdio: "inherit",
     env: process.env,
     cwd: root,
-  },
-);
+  });
 
-process.exit(result.status ?? 1);
+  if (result.error) reportSpawnError(result.error);
+  process.exit(result.status ?? 1);
+}
+
+const child = spawn(process.execPath, vinextArgs, {
+  stdio: "inherit",
+  env: process.env,
+  cwd: root,
+});
+
+child.on("error", reportSpawnError);
+
+function forwardSignal(signal) {
+  if (!child.killed) child.kill(signal);
+}
+
+process.on("SIGINT", () => forwardSignal("SIGINT"));
+process.on("SIGTERM", () => forwardSignal("SIGTERM"));
+
+child.on("exit", (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 1);
+});
