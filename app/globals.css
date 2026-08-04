@@ -191,6 +191,41 @@ button {
   line-height: 1.75;
 }
 
+.faq-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.5;
+  text-decoration: none;
+  text-underline-offset: 4px;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.faq-link span {
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.faq-link b {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.faq-link:hover {
+  color: #c84d2b;
+  text-decoration: underline;
+}
+
+.faq-link:focus-visible {
+  outline: 3px solid rgba(234, 99, 61, 0.25);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
 .hero-insight {
   position: relative;
   padding: 26px 28px;
@@ -1334,6 +1369,12 @@ footer {
 
   .hero-copy {
     font-size: 13px;
+  }
+
+  .faq-link {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    row-gap: 2px;
   }
 
   .hero-insight {

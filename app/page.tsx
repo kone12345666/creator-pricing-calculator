@@ -1212,6 +1212,15 @@ export default function Home() {
           <p className="hero-copy">
             输入采买成本、卖价和客户 CPM，自动反推 KPI 播放量并核算真实毛利。
           </p>
+          <a
+            className="faq-link"
+            href="https://qbw4tzdxpr.feishu.cn/docx/ELZ5dShmNoD5tXxYW39cCQCWnfb"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>首次使用？</span>
+            达人报价测算器｜使用说明与 FAQ <b aria-hidden="true">↗</b>
+          </a>
         </div>
         <div className="hero-insight">
           <span>当前模型的理论最高毛利率</span>
