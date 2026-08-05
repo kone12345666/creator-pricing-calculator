@@ -706,9 +706,17 @@ export default function Home() {
         (payload: {
           ok: boolean;
           projects?: ProjectListItem[];
+          sourceUrl?: string;
         }) => {
           if (payload.ok && payload.projects?.length) {
             setProjects(payload.projects);
+          }
+          if (payload.ok && payload.sourceUrl) {
+            setProject((current) =>
+              current.sourceUrl === payload.sourceUrl
+                ? current
+                : { ...current, sourceUrl: payload.sourceUrl! },
+            );
           }
         },
       )
@@ -1330,13 +1338,19 @@ export default function Home() {
               ? `（${writebackPlan.reviewItemCount}）`
               : ""}
           </button>
-          <a
-            href={project.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            打开多维表格 ↗
-          </a>
+          {project.sourceUrl ? (
+            <a
+              href={project.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              打开多维表格 ↗
+            </a>
+          ) : (
+            <span className="source-link-disabled" title="同步服务未配置多维表格地址">
+              打开多维表格
+            </span>
+          )}
         </div>
       </section>
 

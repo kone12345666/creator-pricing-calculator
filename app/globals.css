@@ -380,6 +380,14 @@ button {
   white-space: nowrap;
 }
 
+.source-link-disabled {
+  color: #8b918e;
+  cursor: not-allowed;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .source-quality {
   color: var(--green);
   font-size: 10px;

@@ -1,9 +1,18 @@
 import { execFile } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const PROJECT_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const PAYLOAD_DIR_NAME = ".feishu-sync-tmp";
+const PAYLOAD_DIR = join(PROJECT_ROOT, PAYLOAD_DIR_NAME);
 const HOST = process.env.SYNC_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.SYNC_PORT ?? 3001);
 const BASE_TOKEN = process.env.FEISHU_BASE_TOKEN ?? "";
@@ -13,8 +22,35 @@ const BASE_URL = process.env.FEISHU_BASE_URL ?? "";
 const ALLOWED_ORIGIN = process.env.SYNC_ALLOWED_ORIGIN ?? "http://localhost:3000";
 const LARK_IDENTITY = process.env.LARK_IDENTITY ?? "user";
 const LARK_PROFILE = process.env.LARK_PROFILE?.trim() ?? "";
-const LARK_CLI =
-  process.env.LARK_CLI_PATH ?? `${homedir()}/.local/bin/lark-cli`;
+const DEFAULT_LARK_CLI =
+  process.platform === "win32"
+    ? `${process.env.APPDATA ?? ""}\\npm\\lark-cli.cmd`
+    : `${homedir()}/.local/bin/lark-cli`;
+const LARK_CLI = process.env.LARK_CLI_PATH?.trim() || DEFAULT_LARK_CLI;
+const LARK_CLI_USE_SHELL =
+  process.platform === "win32" && /\.(cmd|bat)$/i.test(LARK_CLI);
+
+let payloadDirReady;
+let tempFileCounter = 0;
+
+async function ensurePayloadDir() {
+  if (!payloadDirReady) {
+    payloadDirReady = mkdir(PAYLOAD_DIR, { recursive: true });
+  }
+  await payloadDirReady;
+}
+
+async function writeTempJson(value) {
+  await ensurePayloadDir();
+  const fileName = `payload-${process.pid}-${++tempFileCounter}.json`;
+  const content = typeof value === "string" ? value : JSON.stringify(value);
+  await writeFile(join(PAYLOAD_DIR, fileName), content, "utf8");
+  return `./${PAYLOAD_DIR_NAME}/${fileName}`;
+}
+
+function jsonFileArg(relativePath) {
+  return `@${relativePath.replace(/\\/g, "/")}`;
+}
 
 function ensureFeishuConfig() {
   const missing = [
@@ -88,18 +124,34 @@ const creatorWriteFields = {
 async function runLark(args) {
   try {
     const profileArgs = LARK_PROFILE ? ["--profile", LARK_PROFILE] : [];
-    const { stdout } = await execFileAsync(LARK_CLI, [...profileArgs, ...args], {
-      maxBuffer: 20 * 1024 * 1024,
-      env: {
-        ...process.env,
-        LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
-        LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1",
+    const { stdout } = await execFileAsync(
+      LARK_CLI,
+      [...profileArgs, ...args],
+      {
+        maxBuffer: 20 * 1024 * 1024,
+        shell: LARK_CLI_USE_SHELL,
+        cwd: PROJECT_ROOT,
+        env: {
+          ...process.env,
+          LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
+          LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1",
+        },
       },
-    });
+    );
     const parsed = JSON.parse(stdout);
     if (!parsed.ok) throw new Error(parsed.error?.message ?? "飞书操作失败");
     return parsed.data;
   } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error.code === "EINVAL" || error.code === "ENOENT")
+    ) {
+      throw new Error(
+        `无法执行 lark-cli（${LARK_CLI}）。请确认 LARK_CLI_PATH 指向 lark-cli.cmd 的完整路径，且 LARK_PROFILE 与 lark-cli config show 中的 profile 一致。`,
+      );
+    }
     const stderr = error && typeof error === "object" ? error.stderr : null;
     if (typeof stderr === "string" && stderr.trim()) {
       try {
@@ -126,6 +178,12 @@ async function listRecords({ tableId, fields, filter }) {
   let hasMore = true;
 
   while (hasMore) {
+    const filterArgs = filter
+      ? [
+          "--filter-json",
+          jsonFileArg(await writeTempJson(filter)),
+        ]
+      : [];
     const args = [
       "base",
       "+record-list",
@@ -134,7 +192,7 @@ async function listRecords({ tableId, fields, filter }) {
       "--table-id",
       tableId,
       ...fields.flatMap((field) => ["--field-id", field]),
-      ...(filter ? ["--filter-json", filter] : []),
+      ...filterArgs,
       "--offset",
       String(offset),
       "--limit",
@@ -302,7 +360,9 @@ async function batchUpdate(tableId, updateRecords) {
     "--table-id",
     tableId,
     "--json",
-    JSON.stringify({ update_records: updateRecords }),
+    jsonFileArg(
+      await writeTempJson({ update_records: updateRecords }),
+    ),
     "--format",
     "json",
     "--as",
@@ -320,9 +380,11 @@ async function batchCreate(tableId, createRecords) {
       "--table-id",
       tableId,
       "--json",
-      JSON.stringify({
-        create_records: createRecords.slice(index, index + 200),
-      }),
+      jsonFileArg(
+        await writeTempJson({
+          create_records: createRecords.slice(index, index + 200),
+        }),
+      ),
       "--format",
       "json",
       "--as",
@@ -513,13 +575,18 @@ createServer(async (request, response) => {
     sendJson(response, 200, {
       ok: true,
       configured: Boolean(BASE_TOKEN && PROJECT_TABLE_ID && CREATOR_TABLE_ID),
+      sourceUrl: BASE_URL,
     });
     return;
   }
 
   try {
     if (request.method === "GET" && url.pathname === "/projects") {
-      sendJson(response, 200, { ok: true, projects: await readProjects() });
+      sendJson(response, 200, {
+        ok: true,
+        sourceUrl: BASE_URL,
+        projects: await readProjects(),
+      });
       return;
     }
     if (request.method === "GET" && url.pathname === "/project") {
