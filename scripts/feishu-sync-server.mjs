@@ -575,13 +575,18 @@ createServer(async (request, response) => {
     sendJson(response, 200, {
       ok: true,
       configured: Boolean(BASE_TOKEN && PROJECT_TABLE_ID && CREATOR_TABLE_ID),
+      sourceUrl: BASE_URL,
     });
     return;
   }
 
   try {
     if (request.method === "GET" && url.pathname === "/projects") {
-      sendJson(response, 200, { ok: true, projects: await readProjects() });
+      sendJson(response, 200, {
+        ok: true,
+        sourceUrl: BASE_URL,
+        projects: await readProjects(),
+      });
       return;
     }
     if (request.method === "GET" && url.pathname === "/project") {
