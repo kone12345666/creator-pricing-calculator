@@ -31,6 +31,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.selfhost.example
 
 # Local business data, personal authorization and FAQ production materials.
 # The repository keeps only anonymized examples and configuration templates.

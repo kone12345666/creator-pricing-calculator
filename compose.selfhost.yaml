@@ -1,0 +1,34 @@
+services:
+  pricing-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.selfhost
+      args:
+        NEXT_PUBLIC_SYNC_ROOT: /api/sync
+    command: npm start -- --host 0.0.0.0 --port 3103
+    environment:
+      SYNC_INTERNAL_URL: http://pricing-sync:3001
+    ports:
+      - "127.0.0.1:3103:3103"
+    depends_on:
+      pricing-sync:
+        condition: service_started
+    restart: unless-stopped
+
+  pricing-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile.selfhost
+      args:
+        NEXT_PUBLIC_SYNC_ROOT: /api/sync
+    command: node scripts/feishu-sync-server.mjs
+    env_file:
+      - .env.selfhost
+    environment:
+      SYNC_HOST: 0.0.0.0
+      SYNC_PORT: 3001
+      SYNC_ALLOWED_ORIGIN: https://localhost
+      LARK_IDENTITY: bot
+    expose:
+      - "3001"
+    restart: unless-stopped

@@ -19,6 +19,9 @@ const BASE_TOKEN = process.env.FEISHU_BASE_TOKEN ?? "";
 const PROJECT_TABLE_ID = process.env.FEISHU_PROJECT_TABLE_ID ?? "";
 const CREATOR_TABLE_ID = process.env.FEISHU_CREATOR_TABLE_ID ?? "";
 const BASE_URL = process.env.FEISHU_BASE_URL ?? "";
+const FEISHU_APP_ID = process.env.FEISHU_APP_ID?.trim() ?? "";
+const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET?.trim() ?? "";
+const FEISHU_OPEN_BASE = "https://open.feishu.cn/open-apis";
 const ALLOWED_ORIGIN = process.env.SYNC_ALLOWED_ORIGIN ?? "http://localhost:3000";
 const LARK_IDENTITY = process.env.LARK_IDENTITY ?? "user";
 const LARK_PROFILE = process.env.LARK_PROFILE?.trim() ?? "";
@@ -32,6 +35,52 @@ const LARK_CLI_USE_SHELL =
 
 let payloadDirReady;
 let tempFileCounter = 0;
+let tenantAccessToken = "";
+let tenantAccessTokenExpiresAt = 0;
+
+function usesServerAppIdentity() {
+  return Boolean(FEISHU_APP_ID && FEISHU_APP_SECRET);
+}
+
+async function getTenantAccessToken() {
+  if (tenantAccessToken && Date.now() < tenantAccessTokenExpiresAt) {
+    return tenantAccessToken;
+  }
+
+  const response = await fetch(
+    `${FEISHU_OPEN_BASE}/auth/v3/tenant_access_token/internal`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ app_id: FEISHU_APP_ID, app_secret: FEISHU_APP_SECRET }),
+    },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.code !== 0 || !payload.tenant_access_token) {
+    throw new Error(payload.msg || "获取飞书应用访问令牌失败");
+  }
+
+  tenantAccessToken = payload.tenant_access_token;
+  tenantAccessTokenExpiresAt = Date.now() + Math.max(60, Number(payload.expire || 7200) - 60) * 1000;
+  return tenantAccessToken;
+}
+
+async function feishuRequest(path, { method = "GET", body } = {}) {
+  const token = await getTenantAccessToken();
+  const response = await fetch(`${FEISHU_OPEN_BASE}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { "content-type": "application/json; charset=utf-8" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.code !== 0) {
+    throw new Error(payload.msg || `飞书接口请求失败（HTTP ${response.status}）`);
+  }
+  return payload.data ?? {};
+}
 
 async function ensurePayloadDir() {
   if (!payloadDirReady) {
@@ -172,6 +221,39 @@ async function runLark(args) {
 
 async function listRecords({ tableId, fields, filter }) {
   ensureFeishuConfig();
+  if (usesServerAppIdentity()) {
+    const records = [];
+    let pageToken = "";
+    do {
+      const search = new URLSearchParams({ page_size: "500" });
+      if (pageToken) search.set("page_token", pageToken);
+      const data = await feishuRequest(
+        `/bitable/v1/apps/${encodeURIComponent(BASE_TOKEN)}/tables/${encodeURIComponent(tableId)}/records?${search}`,
+      );
+      records.push(...(data.items ?? []));
+      pageToken = data.has_more ? String(data.page_token ?? "") : "";
+    } while (pageToken);
+
+    const conditions = filter ? JSON.parse(filter).conditions ?? [] : [];
+    const matches = (record) => conditions.every(([field, operator, expected]) => {
+      const actual = record.fields?.[field];
+      if (operator === "==") {
+        return String(firstValue(actual) ?? "") === String(expected ?? "");
+      }
+      if (operator === "intersects") {
+        const expectedIds = (Array.isArray(expected) ? expected : []).map((value) => String(value?.id ?? value?.record_id ?? value));
+        const actualIds = (Array.isArray(actual) ? actual : []).map((value) => String(value?.id ?? value?.record_id ?? value));
+        return expectedIds.some((id) => actualIds.includes(id));
+      }
+      throw new Error(`服务器飞书同步暂不支持筛选条件：${operator}`);
+    });
+    const selected = records.filter(matches);
+    return {
+      rows: selected.map((record) => fields.map((field) => record.fields?.[field])),
+      recordIds: selected.map((record) => record.record_id),
+    };
+  }
+
   const rows = [];
   const recordIds = [];
   let offset = 0;
@@ -352,6 +434,18 @@ function writeCellValue(field, value) {
 
 async function batchUpdate(tableId, updateRecords) {
   if (!Object.keys(updateRecords).length) return;
+  if (usesServerAppIdentity()) {
+    await feishuRequest(
+      `/bitable/v1/apps/${encodeURIComponent(BASE_TOKEN)}/tables/${encodeURIComponent(tableId)}/records/batch_update`,
+      {
+        method: "POST",
+        body: {
+          records: Object.entries(updateRecords).map(([record_id, fields]) => ({ record_id, fields })),
+        },
+      },
+    );
+    return;
+  }
   await runLark([
     "base",
     "+record-batch-update",
@@ -372,6 +466,16 @@ async function batchUpdate(tableId, updateRecords) {
 
 async function batchCreate(tableId, createRecords) {
   for (let index = 0; index < createRecords.length; index += 200) {
+    if (usesServerAppIdentity()) {
+      await feishuRequest(
+        `/bitable/v1/apps/${encodeURIComponent(BASE_TOKEN)}/tables/${encodeURIComponent(tableId)}/records/batch_create`,
+        {
+          method: "POST",
+          body: { records: createRecords.slice(index, index + 200).map((fields) => ({ fields })) },
+        },
+      );
+      continue;
+    }
     await runLark([
       "base",
       "+record-batch-create",
@@ -575,6 +679,7 @@ createServer(async (request, response) => {
     sendJson(response, 200, {
       ok: true,
       configured: Boolean(BASE_TOKEN && PROJECT_TABLE_ID && CREATOR_TABLE_ID),
+      identity: usesServerAppIdentity() ? "app" : "local-lark-cli",
       sourceUrl: BASE_URL,
     });
     return;
