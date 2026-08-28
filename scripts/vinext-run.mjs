@@ -21,7 +21,21 @@ if (!command || !supported.has(command)) {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const vinextCli = resolve(root, "node_modules", "vinext", "dist", "cli.js");
-const vinextArgs = [vinextCli, command, ...process.argv.slice(3)];
+const userArgs = process.argv.slice(3);
+
+function withDevHost(args) {
+  if (args.includes("--hostname") || args.some((arg) => arg.startsWith("--hostname="))) {
+    return args;
+  }
+  const devHost = process.env.DEV_HOST?.trim() || "0.0.0.0";
+  return ["--hostname", devHost, ...args];
+}
+
+const vinextArgs = [
+  vinextCli,
+  command,
+  ...(command === "dev" ? withDevHost(userArgs) : userArgs),
+];
 
 process.env.WRANGLER_LOG_PATH ??= ".wrangler/wrangler.log";
 

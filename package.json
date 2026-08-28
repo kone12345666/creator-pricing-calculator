@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
-    "dev:site": "node scripts/vinext-run.mjs dev",
+    "dev:site": "node --env-file-if-exists=.env scripts/vinext-run.mjs dev",
     "dev:sync": "node --env-file-if-exists=.env scripts/feishu-sync-server.mjs",
     "build": "node scripts/vinext-run.mjs build",
     "start": "node scripts/vinext-run.mjs start",
