@@ -126,11 +126,29 @@ type CreatorResult = Creator & {
 };
 
 const STORAGE_KEY = "creator-pricing-calculator-v5-multiproject";
-// Local development uses the helper directly. In the intranet deployment this
-// becomes "/api" and is forwarded by the company's reverse proxy.
-const SYNC_ROOT = (
-  process.env.NEXT_PUBLIC_SYNC_ROOT ?? "http://127.0.0.1:3001"
-).replace(/\/$/, "");
+
+function resolveSyncRoot() {
+  const configured = (
+    process.env.NEXT_PUBLIC_SYNC_ROOT ?? "http://127.0.0.1:3001"
+  ).replace(/\/$/, "");
+
+  if (typeof window === "undefined") {
+    return configured;
+  }
+
+  // Production intranet deployment uses a same-origin path like /api.
+  if (configured.startsWith("/")) {
+    return configured;
+  }
+
+  // Local dev: follow the page hostname so localhost / 127.0.0.1 / LAN IP stay aligned.
+  if (process.env.NODE_ENV === "development") {
+    const port = process.env.NEXT_PUBLIC_SYNC_PORT ?? "3001";
+    return `${window.location.protocol}//${window.location.hostname}:${port}`;
+  }
+
+  return configured;
+}
 
 const snapshotProject: ProjectSource = {
   ...feishuSnapshotProject,
@@ -700,7 +718,7 @@ export default function Home() {
   }, [project, settings, creators, hydrated]);
 
   useEffect(() => {
-    fetch(`${SYNC_ROOT}/projects`, { cache: "no-store" })
+    fetch(`${resolveSyncRoot()}/projects`, { cache: "no-store" })
       .then((response) => response.json())
       .then(
         async (payload: {
@@ -743,7 +761,7 @@ export default function Home() {
       )
       .catch(() => {
         setSyncMessage(
-          `无法连接同步服务（${SYNC_ROOT}），当前显示演示数据。请确认 npm run dev 已启动。`,
+          `无法连接同步服务（${resolveSyncRoot()}），当前显示演示数据。请确认 npm run dev 已启动。`,
         );
       });
   }, []);
@@ -978,12 +996,12 @@ export default function Home() {
     let response: Response;
     try {
       response = await fetch(
-        `${SYNC_ROOT}/project?name=${encodeURIComponent(projectName)}`,
+        `${resolveSyncRoot()}/project?name=${encodeURIComponent(projectName)}`,
         { cache: "no-store" },
       );
     } catch {
       throw new Error(
-        `无法连接同步服务（${SYNC_ROOT}）。请确认 npm run dev 已启动，且 SYNC_ALLOWED_ORIGIN 包含当前页面地址。`,
+        `无法连接同步服务（${resolveSyncRoot()}）。请确认 npm run dev 已启动，且 SYNC_ALLOWED_ORIGIN 包含当前页面地址。`,
       );
     }
     const payload = (await response.json()) as {
@@ -1096,7 +1114,7 @@ export default function Home() {
     setWritebackError("");
     setWritebackConflicts([]);
     try {
-      const response = await fetch(`${SYNC_ROOT}/writeback`, {
+      const response = await fetch(`${resolveSyncRoot()}/writeback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
