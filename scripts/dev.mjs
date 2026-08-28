@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const envFileArgs = [
-  "--env-file-if-exists=.env.local",
   "--env-file-if-exists=.env",
+  "--env-file-if-exists=.env.local",
 ];
 
 function spawnService(args, label) {
