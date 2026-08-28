@@ -26,9 +26,29 @@ const ALLOWED_ORIGINS = (
   .map((value) => value.trim())
   .filter(Boolean);
 
+function isLocalDevOrigin(origin) {
+  try {
+    const url = new URL(origin);
+    const port = url.port || (url.protocol === "https:" ? "443" : "80");
+    if (port !== "3000") return false;
+    return (
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function resolveCorsOrigin(request) {
   const origin = request.headers.origin;
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return origin;
+  }
+  // Local dev: allow localhost / 127.0.0.1 / LAN IP on the page port.
+  if (origin && isLocalDevOrigin(origin)) {
     return origin;
   }
   return ALLOWED_ORIGINS[0] ?? "http://localhost:3000";
