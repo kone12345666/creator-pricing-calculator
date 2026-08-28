@@ -12,6 +12,8 @@
     "build": "node scripts/vinext-run.mjs build",
     "start": "node scripts/vinext-run.mjs start",
     "postinstall": "node scripts/patch-vinext-windows.mjs",
+    "start:windows": "node scripts/windows/launcher.cjs",
+    "build:win-exe": "node scripts/windows/build-exe.mjs",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
