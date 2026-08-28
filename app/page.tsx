@@ -703,13 +703,34 @@ export default function Home() {
     fetch(`${SYNC_ROOT}/projects`, { cache: "no-store" })
       .then((response) => response.json())
       .then(
-        (payload: {
+        async (payload: {
           ok: boolean;
           projects?: ProjectListItem[];
           sourceUrl?: string;
         }) => {
           if (payload.ok && payload.projects?.length) {
             setProjects(payload.projects);
+            const hasSavedDraft = Boolean(
+              window.localStorage.getItem(STORAGE_KEY),
+            );
+            if (
+              !hasSavedDraft &&
+              project.name === feishuSnapshotProject.name
+            ) {
+              try {
+                const nextProject = await fetchProject(payload.projects[0].name);
+                applyProjectData(nextProject);
+                setSyncMessage(
+                  `已自动加载飞书项目“${nextProject.name}”`,
+                );
+              } catch (error) {
+                setSyncMessage(
+                  error instanceof Error
+                    ? `加载飞书项目失败：${error.message}`
+                    : "加载飞书项目失败，请手动选择项目后同步",
+                );
+              }
+            }
           }
           if (payload.ok && payload.sourceUrl) {
             setProject((current) =>
@@ -721,7 +742,9 @@ export default function Home() {
         },
       )
       .catch(() => {
-        // 同步服务不可用时保留当前项目，不影响本地测算。
+        setSyncMessage(
+          `无法连接同步服务（${SYNC_ROOT}），当前显示演示数据。请确认 npm run dev 已启动。`,
+        );
       });
   }, []);
 
@@ -952,10 +975,17 @@ export default function Home() {
   };
 
   const fetchProject = async (projectName: string) => {
-    const response = await fetch(
-      `${SYNC_ROOT}/project?name=${encodeURIComponent(projectName)}`,
-      { cache: "no-store" },
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `${SYNC_ROOT}/project?name=${encodeURIComponent(projectName)}`,
+        { cache: "no-store" },
+      );
+    } catch {
+      throw new Error(
+        `无法连接同步服务（${SYNC_ROOT}）。请确认 npm run dev 已启动，且 SYNC_ALLOWED_ORIGIN 包含当前页面地址。`,
+      );
+    }
     const payload = (await response.json()) as {
       ok: boolean;
       project?: ProjectSource;
@@ -1008,6 +1038,11 @@ export default function Home() {
   };
 
   const syncFromFeishu = async () => {
+    if (project.name === feishuSnapshotProject.name) {
+      setSyncMessage("当前为演示项目，请先在上方下拉框选择真实飞书项目");
+      return;
+    }
+
     const confirmed = window.confirm(
       `从飞书重新同步“${project.name}”？当前页面调整将被飞书数据覆盖。`,
     );

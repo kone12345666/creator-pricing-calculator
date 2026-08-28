@@ -19,7 +19,20 @@ const BASE_TOKEN = process.env.FEISHU_BASE_TOKEN ?? "";
 const PROJECT_TABLE_ID = process.env.FEISHU_PROJECT_TABLE_ID ?? "";
 const CREATOR_TABLE_ID = process.env.FEISHU_CREATOR_TABLE_ID ?? "";
 const BASE_URL = process.env.FEISHU_BASE_URL ?? "";
-const ALLOWED_ORIGIN = process.env.SYNC_ALLOWED_ORIGIN ?? "http://localhost:3000";
+const ALLOWED_ORIGINS = (
+  process.env.SYNC_ALLOWED_ORIGIN ?? "http://localhost:3000"
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+function resolveCorsOrigin(request) {
+  const origin = request.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return origin;
+  }
+  return ALLOWED_ORIGINS[0] ?? "http://localhost:3000";
+}
 const LARK_IDENTITY = process.env.LARK_IDENTITY ?? "user";
 const LARK_PROFILE = process.env.LARK_PROFILE?.trim() ?? "";
 const DEFAULT_LARK_CLI =
@@ -553,11 +566,12 @@ async function readJsonBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-function sendJson(response, status, body) {
+function sendJson(response, request, status, body) {
   response.writeHead(status, {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+    "Access-Control-Allow-Origin": resolveCorsOrigin(request),
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
     "Cache-Control": "no-store",
     "Content-Type": "application/json; charset=utf-8",
   });
@@ -566,13 +580,13 @@ function sendJson(response, status, body) {
 
 createServer(async (request, response) => {
   if (request.method === "OPTIONS") {
-    sendJson(response, 204, {});
+    sendJson(response, request, 204, {});
     return;
   }
 
   const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
   if (url.pathname === "/health") {
-    sendJson(response, 200, {
+    sendJson(response, request, 200, {
       ok: true,
       configured: Boolean(BASE_TOKEN && PROJECT_TABLE_ID && CREATOR_TABLE_ID),
       sourceUrl: BASE_URL,
@@ -582,7 +596,7 @@ createServer(async (request, response) => {
 
   try {
     if (request.method === "GET" && url.pathname === "/projects") {
-      sendJson(response, 200, {
+      sendJson(response, request, 200, {
         ok: true,
         sourceUrl: BASE_URL,
         projects: await readProjects(),
@@ -593,21 +607,21 @@ createServer(async (request, response) => {
       const name = url.searchParams.get("name")?.trim();
       if (!name) throw new Error("缺少项目名称");
       const project = await readProject(name);
-      sendJson(response, 200, { ok: true, project });
+      sendJson(response, request, 200, { ok: true, project });
       return;
     }
     if (request.method === "POST" && url.pathname === "/writeback") {
       const result = await writeBack(await readJsonBody(request));
       if (result.conflict) {
-        sendJson(response, 409, { ok: false, ...result });
+        sendJson(response, request, 409, { ok: false, ...result });
       } else {
-        sendJson(response, 200, { ok: true, ...result });
+        sendJson(response, request, 200, { ok: true, ...result });
       }
       return;
     }
-    sendJson(response, 404, { ok: false, message: "接口不存在" });
+    sendJson(response, request, 404, { ok: false, message: "接口不存在" });
   } catch (error) {
-    sendJson(response, 500, {
+    sendJson(response, request, 500, {
       ok: false,
       message: error instanceof Error ? error.message : "飞书同步失败",
     });
