@@ -3,10 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const envFileArgs = [
-  "--env-file-if-exists=.env",
-  "--env-file-if-exists=.env.local",
-];
+const envFileArgs = ["--env-file-if-exists=.env"];
 
 function spawnService(args, label) {
   const child = spawn(process.execPath, args, {

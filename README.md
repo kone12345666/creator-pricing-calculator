@@ -171,7 +171,7 @@ sequenceDiagram
 
 环境要求：Node.js 22.13 或更高版本。
 
-1. 复制 `.env.example` 为 `.env.local`。
+1. 复制 `.env.example` 为 `.env`。
 2. 填写飞书连接参数（真实配置不可提交）。
 3. 执行 `npm ci` 安装依赖。
 4. 执行 `npm run dev` 启动本地页面；Windows 用户也可双击 `start-windows.cmd`。

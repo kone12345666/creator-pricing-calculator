@@ -6,9 +6,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/dev.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
     "dev:site": "node scripts/vinext-run.mjs dev",
-    "dev:sync": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/feishu-sync-server.mjs",
+    "dev:sync": "node --env-file-if-exists=.env scripts/feishu-sync-server.mjs",
     "build": "node scripts/vinext-run.mjs build",
     "start": "node scripts/vinext-run.mjs start",
     "postinstall": "node scripts/patch-vinext-windows.mjs",

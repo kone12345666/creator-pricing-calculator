@@ -194,7 +194,6 @@ async function startDevelopment(root) {
     root,
     nodeBinary,
     [
-      "--env-file-if-exists=.env.local",
       "--env-file-if-exists=.env",
       "scripts/dev.mjs",
     ],
@@ -215,7 +214,6 @@ async function startProduction(root) {
     root,
     nodeBinary,
     [
-      "--env-file-if-exists=.env.local",
       "--env-file-if-exists=.env",
       "scripts/feishu-sync-server.mjs",
     ],
